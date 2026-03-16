@@ -1,0 +1,17 @@
+fastapi==0.115.6
+pydantic==2.12.5
+uvicorn[standard]
+sqlalchemy
+pymysql
+pyjwt
+pycryptodome
+requests
+pillow
+pyzbar
+opencv-python
+dlib-bin==19.24.2
+numpy
+scipy
+deepface
+pytesseract
+python-multipart
