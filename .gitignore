@@ -1,0 +1,39 @@
+# Byte-compiled / cached files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Build & packaging artifacts
+build/
+dist/
+*.egg-info/
+
+# Test and coverage outputs
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Databases and local data
+*.db
+*.sqlite3
+/.envrc
+*.pem
+*.key
+
+# Logs
+*.log
+
+# IDE / editor files
+.idea/
+.vscode/
+
+# OS metadata
+.DS_Store
+Thumbs.db
