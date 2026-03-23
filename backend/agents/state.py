@@ -4,6 +4,7 @@ class KYCState:
         self.aadhaar_data=None
         self.pan_data=None
         self.ocr_text=None
+        self.pan_ocr_text=None
         self.selfie_frames=[]
         self.liveness=None
         self.form=None

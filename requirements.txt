@@ -15,3 +15,4 @@ scipy
 deepface
 pytesseract
 python-multipart
+easyocr>=1.7.1

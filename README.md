@@ -4,9 +4,9 @@
 1. Copy environment file:
    cp .env.sample .env
 
-2. Make sure OCR runtime is available:
+2. OCR runtimes:
    - Docker users: the backend image installs `tesseract-ocr` automatically.
-   - Local dev on Windows/macOS: install Tesseract and set `TESSERACT_CMD` in `.env` to the full path (e.g. `C:\\Program Files\\Tesseract-OCR\\tesseract.exe` on Windows).
+   - Local dev: you can either install Tesseract (set `TESSERACT_CMD` in `.env` to the executable path) or rely on the built-in `easyocr` fallback (no system install required, but Python must have the `easyocr` package from `requirements.txt`).
 
 3. Start system:
    docker-compose up --build

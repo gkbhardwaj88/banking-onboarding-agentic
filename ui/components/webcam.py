@@ -10,5 +10,5 @@ def capture_selfie():
         client = KYCClient()
         res = client.send_selfie(selfie_bytes)
         st.session_state['selfie_result'] = res
-        st.session_state['step'] = 3
+        st.session_state['step'] = 4
         st.rerun()

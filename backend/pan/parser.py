@@ -10,8 +10,9 @@ def extract_pan_fields(text: str):
     dob = None
 
     for ln in lines:
-        if re.match(PAN_REGEX, ln):
-            pan = ln
+        token = ln.replace(" ", "")
+        if re.match(PAN_REGEX, token):
+            pan = token
         if "Father" in ln or "FATHER" in ln:
             father = ln.replace("Father's Name", "").strip().replace("Father Name", "")
         if "Name" in ln and "Father" not in ln:

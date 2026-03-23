@@ -3,7 +3,6 @@ from components.uploader import upload_kyc_docs
 from components.webcam import capture_selfie
 from components.chat_box import chat_ui
 from components.review_form import review_form
-from components.command_palette import command_palette
 from services.api_client import KYCClient
 from utils.state import init_state
 
@@ -13,33 +12,28 @@ init_state()
 client = KYCClient()
 
 st.title("AI Banking Onboarding System")
-command_palette()
 
 step = st.session_state.get("step", 1)
 
 # Simple stepper
 steps = {
     1: "Upload Documents",
-    2: "Review Parsed Data",
-    3: "Selfie / Liveness",
-    4: "Final Review",
-    5: "Assistant Chat"
+    2: "Selfie / Liveness",
+    3: "Review & Create Account",
+    4: "Assistant Chat"
 }
-st.progress((step - 1) / (len(steps) - 1))
-st.caption(" -> ".join(f"{idx}. {label}" for idx, label in steps.items()))
+st.progress((step-1)/ (len(steps)-1))
+st.caption(" → ".join(f"{idx}. {label}" for idx, label in steps.items()))
 
 if step == 1:
     st.header("Upload KYC Documents")
     upload_kyc_docs()
 elif step == 2:
-    st.header("Review Parsed Information (before selfie)")
-    review_form(show_photos=False, advance_step=3, submit_label="Proceed to Selfie")
-elif step == 3:
     st.header("Capture Selfie for Liveness")
     capture_selfie()
+elif step == 3:
+    st.header("Review Extracted Information")
+    review_form()
 elif step == 4:
-    st.header("Final Review")
-    review_form(show_photos=True, advance_step=5, submit_label="Confirm & Continue")
-elif step == 5:
     st.header("Chat with Banking Assistant")
     chat_ui()

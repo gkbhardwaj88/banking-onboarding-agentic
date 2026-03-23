@@ -27,3 +27,11 @@ class KYCClient:
     def chat(self, msg):
         resp = requests.post(f"{API_BASE}/assistant/chat", params={"msg": msg})
         return resp.json()
+
+    def create_payment_order(self, amount_paise: int, currency: str = "INR"):
+        resp = requests.post(f"{API_BASE}/payment/order", json={"amount": amount_paise, "currency": currency})
+        try:
+            resp.raise_for_status()
+            return resp.json()
+        except Exception:
+            return {"error": "payment_order_failed", "status": resp.status_code, "body": resp.text}
