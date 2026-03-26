@@ -1,0 +1,31 @@
+Agent Overview (200-char descriptions)
+
+1) Orchestrator Agent: Rule-based planner that inspects KYC state, decides next action (PAN OCR, Aadhaar validate/OTP, payment order), logs decisions, and advances the onboarding flow step-by-step. (~200 chars)
+
+2) PAN OCR Agent: Runs OCR on uploaded PAN image, extracts fallback text, parses PAN number, name, father name, DOB; returns errors if PAN missing or unreadable. (~200 chars)
+
+3) Aadhaar Validation Agent: Uses Surepass sandbox APIs to validate Aadhaar, generate OTP, and submit OTP; feeds verified status back to orchestrator for KYC pass/fail decisions. (~200 chars)
+
+4) Payment Agent: Creates Razorpay-style sandbox orders for initial deposit, records order info for account summary, and gates final confirmation on successful order creation. (~200 chars)
+
+
+Interactions
+- UI submits KYC data -> backend builds state -> Orchestrator Agent inspects state -> calls tool-specific agents (PAN OCR, Aadhaar Validation, Payment) -> updates state -> UI renders updated fields and account summary.
+- Agents communicate via shared KYC state and log to agent_events.log for traceability.
+
+
+Internal Calls (Agent -> Tool)
+- Orchestrator calls: tool_ocr_pan(), tool_validate_aadhaar(), tool_generate_otp(), tool_submit_otp(), tool_payment_order().
+- PAN OCR Agent calls: extract_text (OCR router), process_pan (parser).
+- Aadhaar Validation Agent calls: Surepass endpoints (generate-otp, submit-otp, validate).
+- Payment Agent calls: create_order_placeholder (Razorpay sandbox stub).
+
+
+Tools & Tech Stack
+- FastAPI (Python) backend; Streamlit frontend.
+- OCR: EasyOCR fallback; Tesseract optional; custom PAN/Aadhaar text parsers.
+- Identity: Surepass sandbox APIs for Aadhaar OTP/validation.
+- Payments: Razorpay-like sandbox order creator (placeholder).
+- Auth: JWT (python-jose), bcrypt (passlib).
+- DB: SQLAlchemy + MySQL (config via DATABASE_URL).
+- Logging: agent_events.log for agent decisions.

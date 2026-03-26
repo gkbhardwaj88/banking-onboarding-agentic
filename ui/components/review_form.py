@@ -52,10 +52,31 @@ def _extract_name_from_line(line: str) -> str:
     clean = re.sub(r"(?i)government of india", "", line)
     clean = re.sub(r"(?i)dob[: ]*\d{2}/\d{2}/\d{4}", "", clean)
     clean = re.sub(r"(?i)female|male|transgender", "", clean)
+    clean = re.sub(r"(?i)father'?s? name", "", clean)
+    clean = re.sub(r"(?i)name", "", clean)
     # Drop numbers and extra symbols
-    clean = re.sub(r"[0-9#@:]", "", clean)
+    clean = re.sub(r"[0-9#@:$`'\"&_]", "", clean)
     # Collapse spaces
     return " ".join(clean.split()).strip().title()
+
+
+def _extract_relation_name(line: str) -> str:
+    """
+    Extract only the relation name (father/spouse) from a line that may contain address words.
+    """
+    if not line:
+        return ""
+    lower = line.lower()
+    tokens = re.split(r"(wife of|son of|daughter of|s/o|d/o|w/o)", lower, maxsplit=1)
+    if len(tokens) >= 3:
+        rel_segment = tokens[2]
+    else:
+        rel_segment = line
+    # Stop at typical address words
+    rel_segment = re.split(r"(village|post|po|tehsil|district|state|road|street|st|city|pin|pincode)", rel_segment, maxsplit=1)[0]
+    rel_segment = re.sub(r"[0-9,.;:#/\\\\]", " ", rel_segment)
+    rel_segment = " ".join(rel_segment.split())
+    return rel_segment.title()
 
 
 def _parse_from_fallback(text: str) -> dict:
@@ -69,6 +90,7 @@ def _parse_from_fallback(text: str) -> dict:
     aadhaar_dob = _extract_dob(text)
     aadhaar_name = ""
     aadhaar_address = ""
+    aadhaar_father = ""
 
     # Name: try line after 'Government of India' or first line with DOB
     for i, ln in enumerate(lines):
@@ -76,14 +98,21 @@ def _parse_from_fallback(text: str) -> dict:
             candidate = ln
             if i + 1 < len(lines):
                 candidate = lines[i + 1]
+            candidate = re.split(r"\d{2}/\d{2}/\d{4}", candidate)[0]
             aadhaar_name = _extract_name_from_line(candidate)
             break
     if not aadhaar_name and aadhaar_dob:
         # line containing dob
         for ln in lines:
             if aadhaar_dob in ln:
-                aadhaar_name = _extract_name_from_line(ln)
+                candidate = re.split(r"\d{2}/\d{2}/\d{4}", ln)[0]
+                aadhaar_name = _extract_name_from_line(candidate)
                 break
+    if not aadhaar_name and lines:
+        # take the most alpha-dense of first two lines
+        choices = lines[:2]
+        best = max(choices, key=lambda x: sum(c.isalpha() for c in x))
+        aadhaar_name = _extract_name_from_line(best)
 
     # Address: take the line starting with 'Address' and the next line if present
     for i, ln in enumerate(lines):
@@ -93,12 +122,34 @@ def _parse_from_fallback(text: str) -> dict:
                 addr_parts.append(lines[i + 1])
             aadhaar_address = " ".join(addr_parts)
             break
+    # Father/Spouse detection in address line (e.g., "wife of ...", "s/o", "d/o", "w/o")
+    for ln in lines:
+        lower = ln.lower()
+        if any(k in lower for k in ["s/o", "d/o", "w/o", "wife of", "son of", "daughter of"]):
+            aadhaar_father = _extract_relation_name(ln)
+            break
 
     pan_number = _extract_pan_from_text(text)
     pan_dob = _extract_dob(text)
     # PAN name: look for a line with uppercase words before a PAN-like token
     pan_name = ""
+    pan_father = ""
     for ln in lines:
+        if "name:" in ln.lower() and "father" in ln.lower():
+            # e.g., "Name: AMIT KUMAR Father'$ Name: RAJESH KUMAR"
+            # split on "father" token
+            parts = ln.split("Name")
+            if len(parts) >= 2:
+                # after first "Name:"
+                first = parts[1]
+                # remove "Father" segment
+                first_clean = first.split("Father")[0]
+                pan_name = _extract_name_from_line(first_clean)
+            # father
+            if "Father" in ln or "father" in ln:
+                after_father = ln.split("Father")[-1]
+                pan_father = _extract_name_from_line(after_father)
+            break
         if _extract_pan_from_text(ln):
             # use previous non-empty line as name hint
             idx = lines.index(ln)
@@ -113,17 +164,23 @@ def _parse_from_fallback(text: str) -> dict:
             "name": aadhaar_name,
             "dob": aadhaar_dob,
             "address": aadhaar_address,
+            "father_name": aadhaar_father,
             "aadhaar_number": aadhaar_number,
         },
         "pan": {
             "pan": pan_number,
             "dob": pan_dob,
             "name": pan_name,
+            "father_name": pan_father,
         },
     }
 
 
-def review_form(show_photos: bool = True, advance_step: int = 5, submit_label: str = "Save & Continue"):
+def review_form(show_photos: bool = True,
+                advance_step: int = 5,
+                submit_label: str = "Save & Continue",
+                show_payment: bool = False,
+                show_validation: bool = False):
     data = st.session_state.get("kyc_data", {})
     payload = data.get("details", data) or {}
 
@@ -155,17 +212,13 @@ def review_form(show_photos: bool = True, advance_step: int = 5, submit_label: s
     parsed_aadhaar = _parse_from_fallback(ocr_fallback_aadhaar)
 
     pan_name = pan_data.get("name") or parsed_pan["pan"]["name"] or parsed_aadhaar["aadhaar"]["name"]
-    pan_father = pan_data.get("father_name") or ""
+    pan_father = pan_data.get("father_name") or parsed_pan["pan"].get("father_name") or ""
     pan_dob = pan_data.get("dob") or parsed_pan["pan"]["dob"] or parsed_aadhaar["aadhaar"]["dob"]
     pan_number = pan_data.get("pan") or parsed_pan["pan"]["pan"] or ""
 
     # Aadhaar hints
     aadhaar_name = aadhaar_data.get("name") or parsed_aadhaar["aadhaar"]["name"]
-    aadhaar_father = aadhaar_data.get("address", {}).get("co") or ""  # care-of often holds father/spouse
-    if not aadhaar_father:
-        rel_lines = [ln for ln in ocr_fallback.splitlines() if any(k in ln.lower() for k in ["s/o", "d/o", "w/o", "wife of", "son of", "daughter of"])]
-        if rel_lines:
-            aadhaar_father = " ".join(rel_lines[0].split()[2:]).title() if "wife of" in rel_lines[0].lower() else " ".join(rel_lines[0].split()[1:]).title()
+    aadhaar_father = parsed_aadhaar["aadhaar"]["father_name"] or ""
     aadhaar_dob = aadhaar_data.get("dob") or parsed_aadhaar["aadhaar"]["dob"]
     aadhaar_number = aadhaar_data.get("aadhaar_last4") or parsed_aadhaar["aadhaar"]["aadhaar_number"]
     aadhaar_address = ""
@@ -183,6 +236,7 @@ def review_form(show_photos: bool = True, advance_step: int = 5, submit_label: s
     # Choose a photo to show: Aadhaar -> PAN -> first selfie frame (from liveness step)
     selfie_frames = st.session_state.get("selfie_frames") or payload.get("selfie_frames") or []
     selfie_photo = selfie_frames[0] if selfie_frames else None
+    account_type = st.session_state.get("account_type", "Savings")
 
     with st.form("kyc_review_form"):
         st.subheader("OCR Snippet")
@@ -229,30 +283,7 @@ def review_form(show_photos: bool = True, advance_step: int = 5, submit_label: s
             aadhaar_number = st.text_input("Aadhaar Number", value=aadhaar_number, max_chars=12)
             aadhaar_address = st.text_area("Address", value=aadhaar_address, height=100)
 
-        st.write("Validation & Deposit")
-        vcol1, vcol2, vcol3 = st.columns([1, 1, 2])
-        with vcol1:
-            validate_pan_btn = st.form_submit_button("Validate PAN")
-        with vcol2:
-            validate_aadhaar_btn = st.form_submit_button("Validate Aadhaar")
-        with vcol3:
-            submit_btn = st.form_submit_button(submit_label)
-        pay_col = st.container()
-        with pay_col:
-            deposit_amt = st.number_input("Deposit Amount (INR)", min_value=0, value=1000, step=500)
-            pay_btn = st.form_submit_button("Pay Deposit (Razorpay sandbox)")
-
-        if validate_pan_btn:
-            if _validate_pan(pan_number):
-                st.success("PAN format looks valid.")
-            else:
-                st.error("PAN format invalid. Expected pattern: AAAAA9999A.")
-
-        if validate_aadhaar_btn:
-            if _validate_aadhaar(aadhaar_number):
-                st.success("Aadhaar number format looks valid.")
-            else:
-                st.error("Aadhaar should be a 12-digit number starting with 2-9.")
+        submit_btn = st.form_submit_button(submit_label)
 
         if submit_btn:
             errors = []
@@ -280,19 +311,29 @@ def review_form(show_photos: bool = True, advance_step: int = 5, submit_label: s
                         "dob": aadhaar_dob,
                         "address": aadhaar_address,
                     },
+                    "account_type": account_type,
                 }
+                st.session_state["account_type"] = account_type
                 st.session_state["step"] = advance_step
                 st.rerun()
 
-        if pay_btn:
-            client = st.session_state.get("_api_client")
-            if client is None:
-                from services.api_client import KYCClient
-                client = KYCClient()
-                st.session_state["_api_client"] = client
-            order = client.create_payment_order(deposit_amt * 100)
-            st.session_state["deposit_order"] = order
-            if order.get("order_id"):
-                st.success(f"Created Razorpay test order: {order['order_id']} for INR {deposit_amt}")
-            else:
-                st.error(f"Failed to create order: {order}")
+        if show_payment:
+            pay_col = st.container()
+            with pay_col:
+                account_type = st.selectbox("Account Type", ["Savings", "Current", "Salary"], index=["Savings", "Current", "Salary"].index(account_type if account_type in ["Savings", "Current", "Salary"] else "Savings"))
+                deposit_amt = st.number_input("Deposit Amount (INR)", min_value=0, value=1000, step=500)
+                pay_btn = st.form_submit_button("Pay Deposit (Razorpay sandbox)")
+            if pay_btn:
+                st.session_state["account_type"] = account_type
+                st.session_state["deposit_amount"] = deposit_amt
+                client = st.session_state.get("_api_client")
+                if client is None:
+                    from services.api_client import KYCClient
+                    client = KYCClient()
+                    st.session_state["_api_client"] = client
+                order = client.create_payment_order(deposit_amt * 100)
+                st.session_state["deposit_order"] = order
+                if order.get("order_id"):
+                    st.success(f"Created Razorpay test order: {order['order_id']} for INR {deposit_amt}")
+                else:
+                    st.error(f"Failed to create order: {order}")

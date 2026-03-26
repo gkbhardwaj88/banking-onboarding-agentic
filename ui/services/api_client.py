@@ -35,3 +35,11 @@ class KYCClient:
             return resp.json()
         except Exception:
             return {"error": "payment_order_failed", "status": resp.status_code, "body": resp.text}
+
+    def agent_next(self, session_id: str, state: dict):
+        resp = requests.post(f"{API_BASE}/agent/next", json={"session_id": session_id, "state": state})
+        try:
+            resp.raise_for_status()
+            return resp.json()
+        except Exception:
+            return {"error": "agent_next_failed", "status": resp.status_code, "body": resp.text}
